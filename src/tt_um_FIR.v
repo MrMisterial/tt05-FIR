@@ -11,57 +11,48 @@ module tt_um_FIR #( parameter MAX_COUNT = 24'd10_000_000 ) (
     input  wire       rst_n     // reset_n - low to reset
 );
 
-    wire reset = ! rst_n;
-    wire [6:0] led_out;
-    assign uo_out[6:0] = led_out;
-    assign uo_out[7] = 1'b0;
+	assign uio_oe = 0;
 
-    // use bidirectionals as outputs
-    assign uio_oe = 8'b11111111;
+	// It's ALIVE !
+	assign uo_out[7] = 1;
 
-    // put bottom 8 bits of second counter out on the bidirectional gpio
-    assign uio_out = second_counter[7:0];
 
-    // external clock is 10MHz, so need 24 bit counter
-    reg [23:0] second_counter;
-    reg [3:0] digit;
+	wire [7:0] serial_in;
+	assign serial_in = uio_in;
 
-    // if external inputs are set then use that as compare count
-    // otherwise use the hard coded MAX_COUNT
-    wire [23:0] compare = ui_in == 0 ? MAX_COUNT: {6'b0, ui_in[7:0], 10'b0};
-    
-    always @(posedge clk) begin
-	    second_counter <= 0;
-	    digit <= 0;
-    end
+	wire [7:0] y_n;
+	assign uio_out = y_n;
 
-	/*
-    always @(posedge clk) begin
-        // if reset, set counter to 0
-        if (reset) begin
-            second_counter <= 0;
-            digit <= 0;
-        end else begin
-            // if up to 16e6
-            if (second_counter == compare) begin
-                // reset
-                second_counter <= 0;
+	// Deco y[n] va a 7seg_display
+	deco_7seg deco7_seg (.entrada(y_n[7:0]), .salida(uo_out[6:0]));
 
-                // increment digit
-                digit <= digit + 1'b1;
 
-                // only count from 0 to 9
-                if (digit == 9)
-                    digit <= 0;
+	wire [NUM_COEFF*SIZE-1:0] parallel_out;
 
-            end else
-                // increment counter
-                second_counter <= second_counter + 1'b1;
-        end
-    end
-    */
 
-    // instantiate segment display
-    seg7 seg7(.counter(digit), .segments(led_out));
+	wire [SIZE*NUM_COEFF-1:0] coeffs;
+
+
+	coeffs_regs cfs1(
+		.coeff({1'b0, 1'b0, 1'b0, ui_in[7:3]}), 
+		.sel(ui_in[2:1]), 
+		.en(ui_in[0]), 
+		.rst(rst_n), 
+		.clk(clk), 
+		.out(coeffs));
+
+	shift_register #(.N(NUM_COEFF), .SIZE(SIZE)) sr (
+	.clk(clk),
+	.reset(rst_n),
+	.serial_in(serial_in),
+	.parallel_out(parallel_out),
+	.en(ena)
+	);
+
+	fir #(.NUM_COEFF(NUM_COEFF), .NUMBER_SIZE(SIZE)) f (
+	.x_ns(parallel_out),
+	.y_n(y_n),
+	.coeffs(coeffs)
+	);
 
 endmodule
