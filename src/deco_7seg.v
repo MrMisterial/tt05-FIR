@@ -1,3 +1,4 @@
+
 module deco_7seg (
 input [7:0] entrada,
 output reg [6:0] salida
